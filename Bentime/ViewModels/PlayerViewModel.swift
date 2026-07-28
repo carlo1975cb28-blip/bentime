@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UniformTypeIdentifiers
 import VLCKit
 
 /// Main view model managing video playback state through VLCKit.
@@ -30,6 +31,12 @@ class PlayerViewModel: NSObject, ObservableObject {
 
     /// Currently selected embedded subtitle index (-1 means disabled).
     @Published var selectedEmbeddedSubtitleIndex: Int = -1
+
+    /// Error message to display to the user. Nil when no error.
+    @Published var errorMessage: String? = nil
+
+    /// Whether to show the error alert.
+    @Published var showError: Bool = false
 
     // MARK: - VLCKit Properties
 
@@ -87,13 +94,25 @@ class PlayerViewModel: NSObject, ObservableObject {
     func openFilePanel() {
         let panel = NSOpenPanel()
         panel.title = "Open Video File"
-        panel.allowedContentTypes = []
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
 
-        let extensions = Array(SupportedFormats.videoExtensions)
-        panel.allowedFileTypes = extensions
+        panel.allowedContentTypes = [
+            UTType.mpeg4Movie,
+            UTType.movie,
+            UTType.quickTimeMovie,
+            UTType.avi,
+            UTType(filenameExtension: "mkv") ?? .movie,
+            UTType(filenameExtension: "webm") ?? .movie,
+            UTType(filenameExtension: "flv") ?? .movie,
+            UTType(filenameExtension: "wmv") ?? .movie,
+            UTType(filenameExtension: "m4v") ?? .mpeg4Movie,
+            UTType(filenameExtension: "ts") ?? .movie,
+            UTType(filenameExtension: "vob") ?? .movie,
+            UTType(filenameExtension: "3gp") ?? .movie,
+            UTType(filenameExtension: "ogv") ?? .movie
+        ]
 
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
@@ -109,8 +128,11 @@ class PlayerViewModel: NSObject, ObservableObject {
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
 
-        let extensions = Array(SupportedFormats.subtitleExtensions)
-        panel.allowedFileTypes = extensions
+        panel.allowedContentTypes = [
+            UTType(filenameExtension: "srt") ?? .plainText,
+            UTType(filenameExtension: "ass") ?? .plainText,
+            UTType(filenameExtension: "ssa") ?? .plainText
+        ]
 
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
@@ -174,7 +196,9 @@ class PlayerViewModel: NSObject, ObservableObject {
                 self.selectedEmbeddedSubtitleIndex = -1
             }
         } catch {
-            print("Failed to load subtitle: \(error.localizedDescription)")
+            DispatchQueue.main.async { [weak self] in
+                self?.surfaceError("Failed to load subtitle file: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -281,6 +305,20 @@ class PlayerViewModel: NSObject, ObservableObject {
         mediaPlayer.audio?.volume = isMuted ? 0 : Int32(volume * 100)
     }
 
+    // MARK: - Error Handling
+
+    /// Surfaces an error message to the user via the published error state.
+    func surfaceError(_ message: String) {
+        errorMessage = message
+        showError = true
+    }
+
+    /// Dismisses the currently displayed error.
+    func dismissError() {
+        showError = false
+        errorMessage = nil
+    }
+
     // MARK: - Drag and Drop
 
     /// Handles a file drop, opening video or loading subtitle as appropriate.
@@ -315,6 +353,7 @@ extension PlayerViewModel: VLCMediaPlayerDelegate {
             case .error:
                 self.isPlaying = false
                 self.isMediaLoaded = false
+                self.surfaceError("Failed to load or play the media file. The format may be unsupported or the file may be corrupted.")
             default:
                 break
             }

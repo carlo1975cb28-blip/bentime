@@ -419,10 +419,10 @@
 /* Begin XCRemoteSwiftPackageReference section */
 		A10005010000000000000002 /* XCRemoteSwiftPackageReference "VLCKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://code.videolan.org/videolan/VLCKit.git";
+			repositoryURL = "https://github.com/nicklama/vlckit-spm.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 4.0.0;
+				minimumVersion = 3.0.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

@@ -6,6 +6,7 @@ struct ContentView: View {
     @EnvironmentObject var playerViewModel: PlayerViewModel
     @State private var showControls: Bool = true
     @State private var controlsHideTimer: Timer?
+    @State private var keyEventMonitor: Any?
 
     var body: some View {
         ZStack {
@@ -71,9 +72,37 @@ struct ContentView: View {
                 resetControlsTimer()
             }
         }
-        .background(KeyEventHandlerView {
-            handleKeyEvent($0)
-        })
+        .onAppear {
+            setupKeyEventMonitor()
+        }
+        .onDisappear {
+            removeKeyEventMonitor()
+        }
+        .alert("Error", isPresented: $playerViewModel.showError) {
+            Button("OK") {
+                playerViewModel.dismissError()
+            }
+        } message: {
+            Text(playerViewModel.errorMessage ?? "An unknown error occurred.")
+        }
+    }
+
+    // MARK: - Keyboard Event Monitor
+
+    private func setupKeyEventMonitor() {
+        keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if handleKeyEvent(event) {
+                return nil // Event consumed
+            }
+            return event // Pass event through
+        }
+    }
+
+    private func removeKeyEventMonitor() {
+        if let monitor = keyEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyEventMonitor = nil
+        }
     }
 
     // MARK: - Drag and Drop
@@ -108,48 +137,29 @@ struct ContentView: View {
 
     // MARK: - Keyboard Shortcuts
 
-    private func handleKeyEvent(_ event: NSEvent) {
+    /// Handles a key event. Returns true if the event was consumed.
+    private func handleKeyEvent(_ event: NSEvent) -> Bool {
         switch event.keyCode {
         case 49: // Space
             playerViewModel.togglePlayPause()
+            return true
         case 124: // Right arrow
             playerViewModel.skipForward()
+            return true
         case 123: // Left arrow
             playerViewModel.skipBackward()
+            return true
         case 126: // Up arrow
             playerViewModel.setVolume(playerViewModel.volume + 0.1)
+            return true
         case 125: // Down arrow
             playerViewModel.setVolume(playerViewModel.volume - 0.1)
+            return true
         case 46: // M key
             playerViewModel.toggleMute()
+            return true
         default:
-            break
+            return false
         }
-    }
-}
-
-/// A view that intercepts key events for the player.
-struct KeyEventHandlerView: NSViewRepresentable {
-    let onKeyDown: (NSEvent) -> Void
-
-    func makeNSView(context: Context) -> KeyCaptureView {
-        let view = KeyCaptureView()
-        view.onKeyDown = onKeyDown
-        return view
-    }
-
-    func updateNSView(_ nsView: KeyCaptureView, context: Context) {
-        nsView.onKeyDown = onKeyDown
-    }
-}
-
-/// Custom NSView that captures keyboard events.
-class KeyCaptureView: NSView {
-    var onKeyDown: ((NSEvent) -> Void)?
-
-    override var acceptsFirstResponder: Bool { true }
-
-    override func keyDown(with event: NSEvent) {
-        onKeyDown?(event)
     }
 }
