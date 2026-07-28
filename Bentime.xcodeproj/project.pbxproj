@@ -19,7 +19,6 @@
 		A10001010000000000000010 /* TimeFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000010 /* TimeFormatter.swift */; };
 		A10001010000000000000011 /* SupportedFormats.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000011 /* SupportedFormats.swift */; };
 		A10001010000000000000012 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10002010000000000000012 /* Assets.xcassets */; };
-		A10001010000000000000013 /* VLCKit in Frameworks */ = {isa = PBXBuildFile; productRef = A10005010000000000000001 /* VLCKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,7 +44,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10001010000000000000013 /* VLCKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -145,9 +143,6 @@
 			dependencies = (
 			);
 			name = Bentime;
-			packageProductDependencies = (
-				A10005010000000000000001 /* VLCKit */,
-			);
 			productName = Bentime;
 			productReference = A10002010000000000000100 /* Bentime.app */;
 			productType = "com.apple.product-type.application";
@@ -176,9 +171,6 @@
 				Base,
 			);
 			mainGroup = A10004010000000000000001 /* Root */;
-			packageReferences = (
-				A10005010000000000000002 /* XCRemoteSwiftPackageReference "VLCKit" */,
-			);
 			productRefGroup = A10004010000000000000099 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -416,24 +408,6 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		A10005010000000000000002 /* XCRemoteSwiftPackageReference "VLCKit" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/nicklama/vlckit-spm.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 3.0.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		A10005010000000000000001 /* VLCKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A10005010000000000000002 /* XCRemoteSwiftPackageReference "VLCKit" */;
-			productName = VLCKit;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A10007010000000000000001 /* Project object */;
 }

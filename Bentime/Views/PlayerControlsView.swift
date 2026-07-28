@@ -176,17 +176,6 @@ struct PlayerControlsView: View {
                     }
                 }
             }
-
-            if !playerViewModel.embeddedSubtitleNames.isEmpty {
-                Divider()
-                Section("Embedded Subtitles") {
-                    ForEach(Array(playerViewModel.embeddedSubtitleNames.keys.sorted()), id: \.self) { index in
-                        Button(playerViewModel.embeddedSubtitleNames[index] ?? "Track \(index)") {
-                            playerViewModel.selectEmbeddedSubtitle(index)
-                        }
-                    }
-                }
-            }
         } label: {
             Image(systemName: "captions.bubble")
                 .font(.body)
