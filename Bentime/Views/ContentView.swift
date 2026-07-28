@@ -15,8 +15,8 @@ struct ContentView: View {
                 .ignoresSafeArea()
 
             if playerViewModel.isMediaLoaded {
-                // Video player
-                VideoPlayerView(player: playerViewModel.player)
+                // Video player (VLCKit renders into this view)
+                VideoPlayerView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 // Subtitle overlay
