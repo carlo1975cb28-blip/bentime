@@ -18,7 +18,6 @@ struct ContentView: View {
                 // Video player
                 VideoPlayerView(player: playerViewModel.player)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .ignoresSafeArea()
 
                 // Subtitle overlay
                 SubtitleOverlayView(text: playerViewModel.currentSubtitleText)

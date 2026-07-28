@@ -202,24 +202,55 @@ class PlayerViewModel: NSObject, ObservableObject {
     func openVideo(url: URL) {
         stop()
 
-        let playerItem = AVPlayerItem(url: url)
-        player.replaceCurrentItem(with: playerItem)
-        observePlayerItem(playerItem)
+        // Start accessing security-scoped resource if needed
+        _ = url.startAccessingSecurityScopedResource()
 
-        DispatchQueue.main.async { [weak self] in
+        let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+
+        // Check if the asset is playable before attempting playback
+        asset.loadValuesAsynchronously(forKeys: ["playable", "tracks", "duration"]) { [weak self] in
             guard let self = self else { return }
-            self.mediaTitle = url.deletingPathExtension().lastPathComponent
-            self.isMediaLoaded = true
-            self.currentTime = 0
-            self.duration = 0
-            self.subtitleTracks = self.externalSubtitleTracks
+
+            var error: NSError?
+            let status = asset.statusOfValue(forKey: "playable", error: &error)
+
+            DispatchQueue.main.async {
+                switch status {
+                case .loaded:
+                    guard asset.isPlayable else {
+                        self.surfaceError("This file format is not supported for playback. MKV files require H.264 or HEVC video codec on macOS.")
+                        return
+                    }
+
+                    let playerItem = AVPlayerItem(asset: asset)
+                    self.player.replaceCurrentItem(with: playerItem)
+                    self.observePlayerItem(playerItem)
+
+                    self.mediaTitle = url.deletingPathExtension().lastPathComponent
+                    self.isMediaLoaded = true
+                    self.currentTime = 0
+                    self.duration = 0
+                    self.subtitleTracks = self.externalSubtitleTracks
+
+                    self.player.play()
+                    self.autoLoadMatchingSubtitle(for: url)
+
+                case .failed:
+                    let ext = url.pathExtension.lowercased()
+                    if ext == "mkv" {
+                        self.surfaceError("Cannot play this MKV file. macOS can only play MKV files containing H.264 or HEVC video. Try converting with HandBrake or VLC.")
+                    } else {
+                        self.surfaceError("Failed to load media: \(error?.localizedDescription ?? "Unknown error")")
+                    }
+
+                case .cancelled:
+                    break
+
+                default:
+                    self.surfaceError("Unable to determine if the file is playable.")
+                }
+            }
         }
-
-        // Start playback
-        player.play()
-
-        // Look for subtitle file with same name in same directory
-        autoLoadMatchingSubtitle(for: url)
     }
 
     /// Attempts to auto-load a subtitle file with the same base name as the video.
