@@ -1,29 +1,27 @@
 import SwiftUI
-import VLCKit
+import AVKit
 
-/// NSViewRepresentable wrapping VLCVideoView for rendering video output.
+/// NSViewRepresentable wrapping AVPlayerView for rendering video output.
 struct VideoPlayerView: NSViewRepresentable {
-    let player: VLCMediaPlayer
+    let player: AVPlayer
 
-    func makeNSView(context: Context) -> VLCVideoView {
-        let videoView = VLCVideoView()
-        videoView.autoresizingMask = [.width, .height]
-        videoView.fillScreen = true
-
-        // Attach the player to this view
-        player.drawable = videoView
-
-        return videoView
+    func makeNSView(context: Context) -> AVPlayerView {
+        let playerView = AVPlayerView()
+        playerView.player = player
+        playerView.controlsStyle = .none // We use our own custom controls
+        playerView.showsFullScreenToggleButton = false
+        playerView.autoresizingMask = [.width, .height]
+        return playerView
     }
 
-    func updateNSView(_ nsView: VLCVideoView, context: Context) {
-        // Ensure player drawable is set (in case of view recreation)
-        if player.drawable as? VLCVideoView !== nsView {
-            player.drawable = nsView
+    func updateNSView(_ nsView: AVPlayerView, context: Context) {
+        // Update player reference if it changes
+        if nsView.player !== player {
+            nsView.player = player
         }
     }
 
-    static func dismantleNSView(_ nsView: VLCVideoView, coordinator: ()) {
-        // Clean up when view is removed
+    static func dismantleNSView(_ nsView: AVPlayerView, coordinator: ()) {
+        nsView.player = nil
     }
 }

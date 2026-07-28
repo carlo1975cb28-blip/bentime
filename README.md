@@ -1,19 +1,20 @@
 # Bentime
 
-A native macOS video player application built with SwiftUI and VLCKit. Bentime supports playback of MP4, MKV, and many other video formats, along with comprehensive subtitle support including external `.srt` and `.ass/.ssa` files as well as embedded subtitle tracks.
+A native macOS video player application built with SwiftUI and AVFoundation. Bentime supports playback of MP4, MOV, M4V, and other formats supported by Apple's AVPlayer, along with comprehensive external subtitle support including `.srt` and `.ass/.ssa` files.
 
 ## Features
 
-- **Wide Format Support**: Play MP4, MKV, AVI, MOV, WMV, FLV, WebM, and more thanks to VLCKit
-- **MKV Native Playback**: Full Matroska container support including multiple audio and subtitle tracks
+- **Native Playback**: Uses Apple's AVFoundation/AVKit for hardware-accelerated video playback
+- **Format Support**: Play MP4, MOV, M4V, and other formats natively supported by macOS AVPlayer
+- **MKV Support**: macOS 13+ includes system-level codec support for many MKV files
 - **Subtitle Support**:
   - External `.srt` (SubRip) subtitle files
   - External `.ass` / `.ssa` (Advanced SubStation Alpha) subtitle files
-  - Embedded subtitle tracks in MKV files
   - Auto-detection of subtitle files matching video filename
 - **Drag and Drop**: Drop video or subtitle files directly onto the player window
 - **Keyboard Controls**: Space (play/pause), arrow keys (seek/volume), M (mute)
 - **Clean UI**: Auto-hiding transport controls with seek bar, volume slider, and subtitle selector
+- **Zero Dependencies**: Built entirely with system frameworks - no external packages required
 - **macOS Native**: Built with SwiftUI for a native macOS experience
 
 ## Requirements
@@ -35,11 +36,11 @@ A native macOS video player application built with SwiftUI and VLCKit. Bentime s
    open Bentime.xcodeproj
    ```
 
-3. Wait for Xcode to resolve the VLCKit package dependency (fetched via Swift Package Manager from `https://code.videolan.org/videolan/VLCKit.git`).
+3. Select the "Bentime" scheme and a macOS target.
 
-4. Select the "Bentime" scheme and a macOS target.
+4. Build and run (Cmd+R).
 
-5. Build and run (Cmd+R).
+No external dependencies to resolve - the project uses only system frameworks (AVFoundation, AVKit, SwiftUI, UniformTypeIdentifiers).
 
 ## Usage
 
@@ -67,17 +68,18 @@ A native macOS video player application built with SwiftUI and VLCKit. Bentime s
 Click the subtitle icon (captions bubble) in the player controls to:
 - Disable subtitles
 - Select from loaded external subtitle files
-- Select from embedded subtitle tracks (MKV files)
 
 ## Supported Formats
 
-### Video
-MP4, MKV, AVI, MOV, WMV, FLV, WebM, M4V, MPG, MPEG, TS, VOB, 3GP, OGV
+### Video (via AVFoundation)
+
+Natively supported: MP4, MOV, M4V, MPEG, and other formats supported by Apple's AVPlayer.
+
+Additional format support (MKV, AVI, etc.) depends on system-level codecs available on macOS 13+. Users can extend format support by installing third-party codec packages.
 
 ### Subtitles
 - `.srt` - SubRip (with HTML tag stripping)
 - `.ass` / `.ssa` - Advanced SubStation Alpha (with style override stripping)
-- Embedded tracks in MKV containers
 
 ## Architecture
 
@@ -90,10 +92,10 @@ Bentime/
     Subtitle.swift              - Subtitle data models
     SubtitleParser.swift        - .srt and .ass/.ssa parser
   ViewModels/
-    PlayerViewModel.swift       - Playback state management via VLCKit
+    PlayerViewModel.swift       - Playback state management via AVFoundation
   Views/
     ContentView.swift           - Main window with drag-and-drop
-    VideoPlayerView.swift       - NSViewRepresentable wrapping VLCVideoView
+    VideoPlayerView.swift       - NSViewRepresentable wrapping AVPlayerView
     PlayerControlsView.swift    - Transport controls UI
     SubtitleOverlayView.swift   - Subtitle text overlay
     DropOverlayView.swift       - Drag-and-drop visual indicator
@@ -108,7 +110,11 @@ Bentime/
 
 ## Dependencies
 
-- [VLCKit](https://code.videolan.org/videolan/VLCKit) - Provides media playback engine supporting MKV and many other formats that AVFoundation cannot handle natively.
+None. Bentime uses only Apple system frameworks:
+- **AVFoundation** - Media playback engine
+- **AVKit** - AVPlayerView for video rendering
+- **SwiftUI** - User interface
+- **UniformTypeIdentifiers** - File type identification
 
 ## License
 
