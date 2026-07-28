@@ -17,6 +17,7 @@ struct ContentView: View {
             if playerViewModel.isMediaLoaded {
                 // Video player
                 VideoPlayerView(player: playerViewModel.player)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .ignoresSafeArea()
 
                 // Subtitle overlay
