@@ -1,10 +1,10 @@
 import SwiftUI
 import Combine
 import UniformTypeIdentifiers
-import AVFoundation
-import AVKit
+import VLCKit
 
-/// Main view model managing video playback state through AVFoundation.
+/// Main view model managing video playback state through VLCKit.
+/// Uses VLCMediaPlayer for broad format support (MKV, MP4, AVI, WebM, etc.).
 class PlayerViewModel: NSObject, ObservableObject {
 
     // MARK: - Published Properties
@@ -33,17 +33,23 @@ class PlayerViewModel: NSObject, ObservableObject {
     /// Whether to show the error alert.
     @Published var showError: Bool = false
 
-    // MARK: - AVFoundation Properties
+    // MARK: - VLCKit Properties
 
-    /// The AVPlayer instance used for media playback.
-    let player: AVPlayer = AVPlayer()
+    /// The VLCMediaPlayer instance used for media playback.
+    let mediaPlayer: VLCMediaPlayer = VLCMediaPlayer()
 
-    private var timeObserverToken: Any?
-    private var statusObservation: NSKeyValueObservation?
-    private var durationObservation: NSKeyValueObservation?
-    private var timeControlStatusObservation: NSKeyValueObservation?
+    /// The NSView that VLCKit renders video into. Owned by the ViewModel
+    /// to avoid lifecycle issues with SwiftUI view recreation.
+    lazy var videoOutputView: NSView = {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.black.cgColor
+        return view
+    }()
+
     private var externalSubtitleTracks: [SubtitleTrack] = []
     private var subtitleUpdateTimer: Timer?
+    private var previousVolume: Int32 = 100
 
     // MARK: - Initialization
 
@@ -53,96 +59,22 @@ class PlayerViewModel: NSObject, ObservableObject {
     }
 
     deinit {
-        removeTimeObserver()
+        mediaPlayer.delegate = nil
         subtitleUpdateTimer?.invalidate()
-        statusObservation?.invalidate()
-        durationObservation?.invalidate()
-        timeControlStatusObservation?.invalidate()
+        mediaPlayer.stop()
     }
 
     // MARK: - Setup
 
     private func setupPlayer() {
-        player.volume = volume
-        addTimeObserver()
-        observeTimeControlStatus()
-    }
+        mediaPlayer.delegate = self
+        mediaPlayer.drawable = videoOutputView
+        mediaPlayer.audio?.volume = 100  // VLCKit uses 0-200, 100 = normal
+        previousVolume = 100
 
-    /// Adds a periodic time observer to track playback position.
-    private func addTimeObserver() {
-        let interval = CMTime(seconds: 0.1, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-        timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            guard let self = self else { return }
-            if !self.isSeeking {
-                self.currentTime = CMTimeGetSeconds(time)
-            }
-            self.updateCurrentSubtitle()
-        }
-    }
-
-    /// Removes the periodic time observer.
-    private func removeTimeObserver() {
-        if let token = timeObserverToken {
-            player.removeTimeObserver(token)
-            timeObserverToken = nil
-        }
-    }
-
-    /// Observes the player's timeControlStatus to update isPlaying state.
-    private func observeTimeControlStatus() {
-        timeControlStatusObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                switch player.timeControlStatus {
-                case .playing:
-                    self.isPlaying = true
-                case .paused:
-                    self.isPlaying = false
-                case .waitingToPlayAtSpecifiedRate:
-                    // Buffering - keep current state
-                    break
-                @unknown default:
-                    break
-                }
-            }
-        }
-    }
-
-    /// Sets up KVO observations on the current player item for status and duration.
-    private func observePlayerItem(_ item: AVPlayerItem) {
-        statusObservation?.invalidate()
-        durationObservation?.invalidate()
-
-        statusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                switch item.status {
-                case .readyToPlay:
-                    let seconds = CMTimeGetSeconds(item.duration)
-                    if seconds.isFinite && seconds > 0 {
-                        self.duration = seconds
-                    }
-                case .failed:
-                    self.isPlaying = false
-                    self.isMediaLoaded = false
-                    let errorDesc = item.error?.localizedDescription ?? "Unknown error"
-                    self.surfaceError("Failed to load media: \(errorDesc)")
-                case .unknown:
-                    break
-                @unknown default:
-                    break
-                }
-            }
-        }
-
-        durationObservation = item.observe(\.duration, options: [.new]) { [weak self] item, _ in
-            DispatchQueue.main.async {
-                guard let self = self else { return }
-                let seconds = CMTimeGetSeconds(item.duration)
-                if seconds.isFinite && seconds > 0 {
-                    self.duration = seconds
-                }
-            }
+        // Timer for subtitle synchronization
+        subtitleUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            self?.updateCurrentSubtitle()
         }
     }
 
@@ -202,24 +134,41 @@ class PlayerViewModel: NSObject, ObservableObject {
     func openVideo(url: URL) {
         stop()
 
-        let playerItem = AVPlayerItem(url: url)
-        player.replaceCurrentItem(with: playerItem)
-        observePlayerItem(playerItem)
+        // Start accessing security-scoped resource if needed
+        let accessGranted = url.startAccessingSecurityScopedResource()
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.mediaTitle = url.deletingPathExtension().lastPathComponent
-            self.isMediaLoaded = true
-            self.currentTime = 0
-            self.duration = 0
-            self.subtitleTracks = self.externalSubtitleTracks
+        let media = VLCMedia(url: url)
+
+        // Parse media on a background thread to avoid blocking the UI.
+        // VLCKit's parse(withOptions:timeout:) is synchronous and can block
+        // for up to the timeout duration on slow media or network mounts.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            media.parse(withOptions: VLCMediaParsingOptions(VLCMediaParseLocal), timeout: 3000)
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else {
+                    if accessGranted { url.stopAccessingSecurityScopedResource() }
+                    return
+                }
+
+                // Check parsedStatus to surface errors for unplayable files
+                if media.parsedStatus == .failed {
+                    self.surfaceError("Unable to open file: the media could not be parsed. The file may be corrupted or in an unsupported format.")
+                    if accessGranted { url.stopAccessingSecurityScopedResource() }
+                    return
+                }
+
+                self.mediaPlayer.media = media
+                self.mediaTitle = url.deletingPathExtension().lastPathComponent
+                self.isMediaLoaded = true
+                self.currentTime = 0
+                self.duration = 0
+                self.subtitleTracks = self.externalSubtitleTracks
+
+                self.mediaPlayer.play()
+                self.autoLoadMatchingSubtitle(for: url)
+            }
         }
-
-        // Start playback
-        player.play()
-
-        // Look for subtitle file with same name in same directory
-        autoLoadMatchingSubtitle(for: url)
     }
 
     /// Attempts to auto-load a subtitle file with the same base name as the video.
@@ -279,17 +228,20 @@ class PlayerViewModel: NSObject, ObservableObject {
         }
 
         let entry = track.activeEntry(at: currentTime)
-        currentSubtitleText = entry?.text ?? ""
+        let newText = entry?.text ?? ""
+        if newText != currentSubtitleText {
+            currentSubtitleText = newText
+        }
     }
 
     // MARK: - Playback Controls
 
     func play() {
-        player.play()
+        mediaPlayer.play()
     }
 
     func pause() {
-        player.pause()
+        mediaPlayer.pause()
     }
 
     func togglePlayPause() {
@@ -301,8 +253,7 @@ class PlayerViewModel: NSObject, ObservableObject {
     }
 
     func stop() {
-        player.pause()
-        player.seek(to: .zero)
+        mediaPlayer.stop()
         isPlaying = false
         currentTime = 0
         currentSubtitleText = ""
@@ -311,13 +262,10 @@ class PlayerViewModel: NSObject, ObservableObject {
     /// Seeks to a specific time in seconds.
     func seek(to seconds: TimeInterval) {
         guard duration > 0 else { return }
-        let targetTime = CMTime(seconds: seconds, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-        player.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.isSeeking = false
-            }
-        }
+        let targetMilliseconds = Int32(seconds * 1000)
+        mediaPlayer.time = VLCTime(int: targetMilliseconds)
         currentTime = seconds
+        isSeeking = false
     }
 
     /// Skips forward by the specified number of seconds.
@@ -334,9 +282,12 @@ class PlayerViewModel: NSObject, ObservableObject {
 
     // MARK: - Volume
 
+    /// Sets the volume. Accepts a value between 0.0 and 1.0.
     func setVolume(_ newVolume: Float) {
         volume = min(max(newVolume, 0), 1)
-        player.volume = volume
+        let vlcVolume = Int32(volume * 100)
+        mediaPlayer.audio?.volume = vlcVolume
+        previousVolume = vlcVolume
         if volume > 0 {
             isMuted = false
         }
@@ -344,7 +295,11 @@ class PlayerViewModel: NSObject, ObservableObject {
 
     func toggleMute() {
         isMuted.toggle()
-        player.volume = isMuted ? 0 : volume
+        if isMuted {
+            mediaPlayer.audio?.volume = 0
+        } else {
+            mediaPlayer.audio?.volume = previousVolume
+        }
     }
 
     // MARK: - Error Handling
@@ -373,6 +328,56 @@ class PlayerViewModel: NSObject, ObservableObject {
             } else if SupportedFormats.isSubtitleFile(ext) {
                 loadExternalSubtitle(url: url)
                 return
+            }
+        }
+    }
+}
+
+// MARK: - VLCMediaPlayerDelegate
+
+extension PlayerViewModel: VLCMediaPlayerDelegate {
+
+    func mediaPlayerStateChanged(_ aNotification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            switch self.mediaPlayer.state {
+            case .playing:
+                self.isPlaying = true
+            case .paused:
+                self.isPlaying = false
+            case .stopped:
+                self.isPlaying = false
+            case .ended:
+                self.isPlaying = false
+                self.currentTime = self.duration
+            case .error:
+                self.isPlaying = false
+                self.surfaceError("An error occurred during playback.")
+            default:
+                break
+            }
+        }
+    }
+
+    func mediaPlayerTimeChanged(_ aNotification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            // Update current time from VLCKit (milliseconds to seconds)
+            if !self.isSeeking {
+                let timeMs = self.mediaPlayer.time?.intValue ?? 0
+                self.currentTime = TimeInterval(timeMs) / 1000.0
+            }
+
+            // Update duration if not yet known
+            if self.duration <= 0 {
+                if let length = self.mediaPlayer.media?.length {
+                    let lengthMs = length.intValue
+                    if lengthMs > 0 {
+                        self.duration = TimeInterval(lengthMs) / 1000.0
+                    }
+                }
             }
         }
     }

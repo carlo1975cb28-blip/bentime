@@ -44,3 +44,8 @@ fastlane/test_output
 
 ## Agents/tasks (development)
 .agents/
+
+## VLCKit binary framework (too large for git, see Frameworks/DOWNLOAD.md)
+Frameworks/*.framework
+Frameworks/*.xcframework
+Frameworks/dSYMs/

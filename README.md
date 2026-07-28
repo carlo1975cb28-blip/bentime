@@ -1,12 +1,11 @@
 # Bentime
 
-A native macOS video player application built with SwiftUI and AVFoundation. Bentime supports playback of MP4, MOV, M4V, and other formats supported by Apple's AVPlayer, along with comprehensive external subtitle support including `.srt` and `.ass/.ssa` files.
+A native macOS video player application built with SwiftUI and VLCKit. Bentime supports playback of virtually any video format -- MP4, MKV (all codecs), AVI, WMV, FLV, WebM, and more -- along with comprehensive external subtitle support including `.srt` and `.ass/.ssa` files.
 
 ## Features
 
-- **Native Playback**: Uses Apple's AVFoundation/AVKit for hardware-accelerated video playback
-- **Format Support**: Play MP4, MOV, M4V, and other formats natively supported by macOS AVPlayer
-- **MKV Support**: macOS 13+ includes system-level codec support for many MKV files
+- **Universal Playback**: Uses VLCKit for broad codec support, including formats that AVFoundation cannot handle
+- **Format Support**: Play MP4, MKV (any codec), AVI, WMV, FLV, WebM, MOV, M4V, TS, VOB, OGV, 3GP, and more
 - **Subtitle Support**:
   - External `.srt` (SubRip) subtitle files
   - External `.ass` / `.ssa` (Advanced SubStation Alpha) subtitle files
@@ -14,7 +13,6 @@ A native macOS video player application built with SwiftUI and AVFoundation. Ben
 - **Drag and Drop**: Drop video or subtitle files directly onto the player window
 - **Keyboard Controls**: Space (play/pause), arrow keys (seek/volume), M (mute)
 - **Clean UI**: Auto-hiding transport controls with seek bar, volume slider, and subtitle selector
-- **Zero Dependencies**: Built entirely with system frameworks - no external packages required
 - **macOS Native**: Built with SwiftUI for a native macOS experience
 
 ## Requirements
@@ -22,25 +20,46 @@ A native macOS video player application built with SwiftUI and AVFoundation. Ben
 - macOS 14.0 (Sonoma) or later
 - Xcode 15.0 or later
 - Swift 5.9+
+- VLCKit 3.7.3 (see setup instructions below)
 
-## Building
+## Setup
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/yourusername/bentime.git
-   cd bentime
-   ```
+### 1. Clone the Repository
 
-2. Open the Xcode project:
+```bash
+git clone https://github.com/yourusername/bentime.git
+cd bentime
+```
+
+### 2. Download VLCKit Framework
+
+The VLCKit binary framework is not included in the repository due to its size. Download it using one of these methods:
+
+**Option A: One-liner (recommended)**
+
+```bash
+cd Frameworks && \
+curl -L "https://download.videolan.org/pub/cocoapods/prod/VLCKit-3.7.3-319ed2c0-79128878.tar.xz" | tar xJ --strip-components=1 "VLCKit - binary package/VLCKit.xcframework"
+```
+
+**Option B: Manual download**
+
+1. Download from: https://download.videolan.org/pub/cocoapods/prod/VLCKit-3.7.3-319ed2c0-79128878.tar.xz
+2. Extract the archive
+3. Copy `VLCKit - binary package/VLCKit.xcframework` into the `Frameworks/` directory
+
+See `Frameworks/DOWNLOAD.md` for detailed instructions.
+
+### 3. Build and Run
+
+1. Open the Xcode project:
    ```bash
    open Bentime.xcodeproj
    ```
 
-3. Select the "Bentime" scheme and a macOS target.
+2. Select the "Bentime" scheme and a macOS target.
 
-4. Build and run (Cmd+R).
-
-No external dependencies to resolve - the project uses only system frameworks (AVFoundation, AVKit, SwiftUI, UniformTypeIdentifiers).
+3. Build and run (Cmd+R).
 
 ## Usage
 
@@ -71,13 +90,16 @@ Click the subtitle icon (captions bubble) in the player controls to:
 
 ## Supported Formats
 
-### Video (via AVFoundation)
+### Video (via VLCKit)
 
-Natively supported: MP4, MOV, M4V, MPEG, and other formats supported by Apple's AVPlayer.
+VLCKit provides native support for virtually all video formats and codecs:
 
-Additional format support (MKV, AVI, etc.) depends on system-level codecs available on macOS 13+. Users can extend format support by installing third-party codec packages.
+- **Containers**: MP4, MKV, AVI, WMV, FLV, WebM, MOV, M4V, TS, VOB, OGV, 3GP, MPEG, and more
+- **Video Codecs**: H.264, H.265/HEVC, VP8, VP9, AV1, MPEG-2, MPEG-4, Theora, DivX, and more
+- **Audio Codecs**: AAC, MP3, FLAC, Vorbis, Opus, AC3, DTS, PCM, and more
 
 ### Subtitles
+
 - `.srt` - SubRip (with HTML tag stripping)
 - `.ass` / `.ssa` - Advanced SubStation Alpha (with style override stripping)
 
@@ -92,10 +114,10 @@ Bentime/
     Subtitle.swift              - Subtitle data models
     SubtitleParser.swift        - .srt and .ass/.ssa parser
   ViewModels/
-    PlayerViewModel.swift       - Playback state management via AVFoundation
+    PlayerViewModel.swift       - Playback state management via VLCKit
   Views/
     ContentView.swift           - Main window with drag-and-drop
-    VideoPlayerView.swift       - NSViewRepresentable wrapping AVPlayerView
+    VideoPlayerView.swift       - NSViewRepresentable wrapping NSView for VLCKit
     PlayerControlsView.swift    - Transport controls UI
     SubtitleOverlayView.swift   - Subtitle text overlay
     DropOverlayView.swift       - Drag-and-drop visual indicator
@@ -106,15 +128,24 @@ Bentime/
     Assets.xcassets/            - App icons and colors
   Info.plist                    - App metadata and UTI declarations
   Bentime.entitlements          - Runtime permissions
+Frameworks/
+  VLCKit.xcframework/           - VLCKit binary (not in git, see DOWNLOAD.md)
+  DOWNLOAD.md                   - Framework download instructions
 ```
 
 ## Dependencies
 
-None. Bentime uses only Apple system frameworks:
-- **AVFoundation** - Media playback engine
-- **AVKit** - AVPlayerView for video rendering
-- **SwiftUI** - User interface
-- **UniformTypeIdentifiers** - File type identification
+- **VLCKit 3.7.3** - Video playback engine (local binary framework)
+- **SwiftUI** - User interface (system framework)
+- **UniformTypeIdentifiers** - File type identification (system framework)
+- **AppKit** - NSView for VLCKit drawable (system framework)
+
+## Entitlements
+
+The app requires the following entitlements for VLCKit compatibility (already configured):
+
+- `com.apple.security.cs.allow-unsigned-executable-memory` - Required by VLCKit's internal codec execution
+- `com.apple.security.cs.disable-library-validation` - Required to load the VLCKit framework
 
 ## License
 
