@@ -1,32 +1,32 @@
 import SwiftUI
 import AVFoundation
 
-/// Custom NSView that hosts an AVPlayerLayer for reliable video rendering.
+/// Custom NSView that uses AVPlayerLayer as its backing layer for reliable video rendering.
 class VideoLayerView: NSView {
-    var playerLayer: AVPlayerLayer
-
-    init(player: AVPlayer) {
-        self.playerLayer = AVPlayerLayer(player: player)
-        super.init(frame: .zero)
+    
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
         wantsLayer = true
-        playerLayer.videoGravity = .resizeAspect
-        layer?.addSublayer(playerLayer)
     }
-
+    
     required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
+        super.init(coder: coder)
+        wantsLayer = true
     }
-
-    override func layout() {
-        super.layout()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        playerLayer.frame = bounds
-        CATransaction.commit()
+    
+    override func makeBackingLayer() -> CALayer {
+        let playerLayer = AVPlayerLayer()
+        playerLayer.videoGravity = .resizeAspect
+        return playerLayer
     }
-
-    func updatePlayer(_ player: AVPlayer) {
-        playerLayer.player = player
+    
+    var playerLayer: AVPlayerLayer {
+        return layer as! AVPlayerLayer
+    }
+    
+    var player: AVPlayer? {
+        get { playerLayer.player }
+        set { playerLayer.player = newValue }
     }
 }
 
@@ -35,17 +35,18 @@ struct VideoPlayerView: NSViewRepresentable {
     let player: AVPlayer
 
     func makeNSView(context: Context) -> VideoLayerView {
-        let view = VideoLayerView(player: player)
+        let view = VideoLayerView(frame: .zero)
+        view.player = player
         return view
     }
 
     func updateNSView(_ nsView: VideoLayerView, context: Context) {
-        if nsView.playerLayer.player !== player {
-            nsView.updatePlayer(player)
+        if nsView.player !== player {
+            nsView.player = player
         }
     }
 
     static func dismantleNSView(_ nsView: VideoLayerView, coordinator: ()) {
-        nsView.playerLayer.player = nil
+        nsView.player = nil
     }
 }
