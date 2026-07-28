@@ -2,25 +2,20 @@ import SwiftUI
 import AppKit
 
 /// Video player view using VLCKit for rendering.
-/// Creates an NSView that VLCMediaPlayer uses as its drawable surface.
+/// Vends the ViewModel-owned NSView as the drawable surface, ensuring
+/// a stable lifecycle that is not affected by SwiftUI view recreation.
 struct VideoPlayerView: NSViewRepresentable {
     @EnvironmentObject var playerViewModel: PlayerViewModel
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.black.cgColor
-
-        // Set this view as the VLCMediaPlayer's drawable
-        playerViewModel.videoDrawable = view
-
-        return view
+        // Return the ViewModel-owned view directly. This ensures the drawable
+        // is never recreated behind VLCKit's back when SwiftUI re-evaluates
+        // the view hierarchy.
+        return playerViewModel.videoOutputView
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        // Ensure the drawable is still set (handles view recreation)
-        if playerViewModel.videoDrawable !== nsView {
-            playerViewModel.videoDrawable = nsView
-        }
+        // No-op: the ViewModel owns and manages the view's lifecycle.
+        // VLCKit's drawable is set once during player setup and remains stable.
     }
 }

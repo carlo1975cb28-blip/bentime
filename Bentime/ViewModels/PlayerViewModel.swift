@@ -38,12 +38,14 @@ class PlayerViewModel: NSObject, ObservableObject {
     /// The VLCMediaPlayer instance used for media playback.
     let mediaPlayer: VLCMediaPlayer = VLCMediaPlayer()
 
-    /// The NSView that VLCKit renders video into. Set by VideoPlayerView.
-    var videoDrawable: NSView? {
-        didSet {
-            mediaPlayer.drawable = videoDrawable
-        }
-    }
+    /// The NSView that VLCKit renders video into. Owned by the ViewModel
+    /// to avoid lifecycle issues with SwiftUI view recreation.
+    lazy var videoOutputView: NSView = {
+        let view = NSView()
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.black.cgColor
+        return view
+    }()
 
     private var externalSubtitleTracks: [SubtitleTrack] = []
     private var subtitleUpdateTimer: Timer?
@@ -57,6 +59,7 @@ class PlayerViewModel: NSObject, ObservableObject {
     }
 
     deinit {
+        mediaPlayer.delegate = nil
         subtitleUpdateTimer?.invalidate()
         mediaPlayer.stop()
     }
@@ -65,6 +68,7 @@ class PlayerViewModel: NSObject, ObservableObject {
 
     private func setupPlayer() {
         mediaPlayer.delegate = self
+        mediaPlayer.drawable = videoOutputView
         mediaPlayer.audio?.volume = 100  // VLCKit uses 0-200, 100 = normal
         previousVolume = 100
 
@@ -131,22 +135,40 @@ class PlayerViewModel: NSObject, ObservableObject {
         stop()
 
         // Start accessing security-scoped resource if needed
-        _ = url.startAccessingSecurityScopedResource()
+        let accessGranted = url.startAccessingSecurityScopedResource()
 
         let media = VLCMedia(url: url)
 
-        // Parse media to get duration info
-        media.parse(withOptions: VLCMediaParsingOptions(VLCMediaParseLocal), timeout: 3000)
+        // Parse media on a background thread to avoid blocking the UI.
+        // VLCKit's parse(withOptions:timeout:) is synchronous and can block
+        // for up to the timeout duration on slow media or network mounts.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            media.parse(withOptions: VLCMediaParsingOptions(VLCMediaParseLocal), timeout: 3000)
 
-        mediaPlayer.media = media
-        mediaTitle = url.deletingPathExtension().lastPathComponent
-        isMediaLoaded = true
-        currentTime = 0
-        duration = 0
-        subtitleTracks = externalSubtitleTracks
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else {
+                    if accessGranted { url.stopAccessingSecurityScopedResource() }
+                    return
+                }
 
-        mediaPlayer.play()
-        autoLoadMatchingSubtitle(for: url)
+                // Check parsedStatus to surface errors for unplayable files
+                if media.parsedStatus == .failed {
+                    self.surfaceError("Unable to open file: the media could not be parsed. The file may be corrupted or in an unsupported format.")
+                    if accessGranted { url.stopAccessingSecurityScopedResource() }
+                    return
+                }
+
+                self.mediaPlayer.media = media
+                self.mediaTitle = url.deletingPathExtension().lastPathComponent
+                self.isMediaLoaded = true
+                self.currentTime = 0
+                self.duration = 0
+                self.subtitleTracks = self.externalSubtitleTracks
+
+                self.mediaPlayer.play()
+                self.autoLoadMatchingSubtitle(for: url)
+            }
+        }
     }
 
     /// Attempts to auto-load a subtitle file with the same base name as the video.
